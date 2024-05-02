@@ -14,6 +14,52 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123
 - Run on the worker node:
 $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
 (If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
+
+################################################## 
+Josh Notes
+
+#Shakespeare Character-level 
+- n_layer = 6
+- n_head = 6
+- n_embd = 384
+- dropout = 0.0
+
+vocab size: 65
+train has 1,003,854 tokens
+val has 111,540 tokens
+
+python train.py config/train_shakespeare_char.py --device=mps --compile=False 
+ - step 250: train loss 1.6695, val loss 1.8461
+ - step 500: train loss 1.2539, val loss 1.5563
+  -- saving checkpoint to out-shakespeare-char
+ - step 750: train loss 1.0074, val loss 1.6255
+ - step 1000: train loss 0.6664, val loss 1.9732
+ - step 1250: train loss 0.3759, val loss 2.4989
+
+ -- time ≈ 600.35ms/iter
+
+
+python sample.py --out_dir=out-shakespeare-char --device=mps
+
+### My smaller version
+- n_layer = 6
+- n_head = 6
+- n_embd = 192
+- dropout = 0.0
+
+python train.py config/train_shakespeare_char_small.py --device=mps --compile=False 
+ - step 250: train loss 2.1339, val loss 2.1941
+ - step 500: train loss 1.5164, val loss 1.7146
+ - step 750: train loss 1.3233, val loss 1.5653
+ - step 1000: train loss 1.2178, val loss 1.5396
+  -- saving checkpoint to out-shakespeare-char-small
+ - step 1250: train loss 1.1272, val loss 1.5531
+
+  -- time ≈ 304.64ms/iter
+
+python sample.py --out_dir=out-shakespeare-char-small --device=mps
+
+
 """
 
 import os

@@ -75,6 +75,7 @@ class CausalSelfAttention(nn.Module):
         y = self.resid_dropout(self.c_proj(y))
         return y
 
+# MLP is the Feed Forward network
 class MLP(nn.Module):
 
     def __init__(self, config):
@@ -83,6 +84,7 @@ class MLP(nn.Module):
         self.gelu    = nn.GELU()
         self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
+        self.print_info()
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -90,6 +92,21 @@ class MLP(nn.Module):
         x = self.c_proj(x)
         x = self.dropout(x)
         return x
+    
+    def print_info(self):
+        num_params_fc = self.c_fc.in_features * self.c_fc.out_features + self.c_fc.out_features
+        num_params_proj = self.c_proj.in_features * self.c_proj.out_features + self.c_proj.out_features
+        print("MLP Size:")
+        print("  - Fully Connected Layer (c_fc):")
+        print("    - Input Dimension:", self.c_fc.in_features)
+        print("    - Output Dimension:", self.c_fc.out_features)
+        print("    - Total Parameters:", num_params_fc)
+        print("  - Output Projection (c_proj):")
+        print("    - Input Dimension:", self.c_proj.in_features)
+        print("    - Output Dimension:", self.c_proj.out_features)
+        print("    - Total Parameters:", num_params_proj)
+        print()
+
 
 class Block(nn.Module):
 
