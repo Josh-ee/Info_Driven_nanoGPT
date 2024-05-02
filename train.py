@@ -31,7 +31,7 @@ val has 111,540 tokens
 python train.py config/train_shakespeare_char.py --device=mps --compile=False 
  - step 250: train loss 1.6695, val loss 1.8461
  - step 500: train loss 1.2539, val loss 1.5563
-  -- saving checkpoint to out-shakespeare-char
+  -- saving checkpoint to out-shakespeare-char  # Auto Saves at lowest Val loss
  - step 750: train loss 1.0074, val loss 1.6255
  - step 1000: train loss 0.6664, val loss 1.9732
  - step 1250: train loss 0.3759, val loss 2.4989
