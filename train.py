@@ -18,7 +18,7 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 ################################################## 
 Josh Notes
 
-#Shakespeare Character-level 
+### Shakespeare Character-level 
 - n_layer = 6
 - n_head = 6
 - n_embd = 384
@@ -59,6 +59,16 @@ python train.py config/train_shakespeare_char_small.py --device=mps --compile=Fa
 
 python sample.py --out_dir=out-shakespeare-char-small --device=mps
 
+
+### Shakespeare Token-level
+python train.py config/train_shakespeare.py --device=mps --compile=False 
+ - iter 44: loss 7.4120, time 8258.99ms, mfu 1.00%
+ - step 45: train loss 7.4703, val loss 7.5479
+ - saving checkpoint to out-shakespeare
+
+ ### WikiText-2 Token-level
+
+python train.py config/train_wikitext-2.py --device=mps --compile=False 
 
 """
 
