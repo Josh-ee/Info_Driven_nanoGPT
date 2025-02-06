@@ -28,6 +28,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from model import GPTConfig, GPT
+import torch.nn.functional as F
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -133,52 +134,44 @@ data_dir = os.path.join('data', dataset)
 #     return x, y
 
 def get_batch(split):
-    # load the memmap (unchanged)
+    # load from the same bin files
     if split == 'train':
         data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
     else:
         data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
     
-    # Get the token id for newline from our meta dict.
-    # (Assumes meta['stoi'] contains the mapping and that '\n' is in the vocabulary.)
-    newline_token = meta['stoi']['\n']
-
-    # Compute the starting indices for each full line.
-    # The very first token is the start of a line.
-    line_starts = [0]
-    # Find indices where the token is newline; the following token (if any) is a new line’s start.
-    newline_idxs = np.where(data == newline_token)[0]
-    for idx in newline_idxs:
-        start = idx + 1
-        if start < len(data):
-            line_starts.append(start)
-    # Filter out any starting positions that do not have enough tokens for a full math line.
-    # (Assuming each math equation is exactly block_size tokens long.)
-    line_starts = [i for i in line_starts if i + block_size <= len(data)]
+    # Each line in the original text is stored as:
+    #   [8 tokens representing the math equation] + [1 token for the newline]
+    # so the total "line length" is block_size + 1.
+    line_length = block_size + 1  # e.g. 8+1 = 9 tokens per line
+    n_lines = len(data) // line_length  # number of complete lines in the file
     
+    # Now sample a random set of lines (one example per line)
+    # (if you want to use all your data sequentially you could also precompute the list of start indices)
+    line_indices = torch.randint(0, n_lines, (batch_size,))
     
-    # Randomly choose batch_size many starting positions from our list of line starts.
-    # (Using np.random.choice; you could also use torch if desired.)
-    chosen_starts = np.random.choice(line_starts, size=batch_size, replace=True)
+    x_list = []
+    y_list = []
+    for idx in line_indices:
+        start = int(idx) * line_length
+        # x is the 8-character math equation (ignoring the newline)
+        x_line = torch.from_numpy(data[start:start + block_size].astype(np.int64))
+        # y is just x shifted by one character (so that the model learns to predict the next token)
+        y_line = torch.from_numpy(data[start + 1:start + 1 + block_size].astype(np.int64))
+        x_list.append(x_line)
+        y_list.append(y_line)
     
-    # Build the batch.
-    # x will be the math line tokens and y will be the same sequence shifted by one.
-    xs = []
-    ys = []
-    for i in chosen_starts:
-        # x: tokens i ... i+block_size-1 (the complete math line)
-        # y: tokens i+1 ... i+block_size (for next-token prediction)
-        xs.append(torch.from_numpy(data[i:i+block_size].astype(np.int64)))
-        ys.append(torch.from_numpy(data[i+1:i+block_size+1].astype(np.int64)))
-    x = torch.stack(xs)
-    y = torch.stack(ys)
-
+    x = torch.stack(x_list)
+    y = torch.stack(y_list)
+    
     if device_type == 'cuda':
-        # pin the memory and move asynchronously
+        # pin arrays so we can move them to GPU asynchronously
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
     else:
         x, y = x.to(device), y.to(device)
+    
     return x, y
+
 
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
@@ -193,6 +186,8 @@ if os.path.exists(meta_path):
         meta = pickle.load(f)
     meta_vocab_size = meta['vocab_size']
     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
+
+stop_token_id = meta['stoi']['>']
 
 # model init
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
@@ -343,17 +338,34 @@ while True:
     # and using the GradScaler if data type is float16
     for micro_step in range(gradient_accumulation_steps):
         if ddp:
-            # in DDP training we only need to sync gradients at the last micro step.
-            # the official way to do this is with model.no_sync() context manager, but
-            # I really dislike that this bloats the code and forces us to repeat code
-            # looking at the source of that context manager, it just toggles this variable
+            # Only sync gradients on the last micro-step in DDP training.
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         with ctx:
-            logits, loss = model(X, Y)
-            loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
-        # immediately async prefetch next batch while model is doing the forward pass on the GPU
+            # Pass targets=Y so that the model returns logits for every time step.
+            output = model(X, targets=Y)
+            logits = output[0] if isinstance(output, tuple) else output  # Now logits is of shape (batch_size, block_size, vocab_size)
+            
+            # --- Custom Loss Computation ---
+            # Create a mask that is 1 for positions up to and including the first occurrence of ">"
+            # in the target Y, and 0 thereafter.
+            is_stop = (Y == stop_token_id).float()  # Shape: (batch_size, block_size)
+            mask = (torch.cumsum(is_stop, dim=1) <= 1).float()  # Keep tokens until (and including) the first ">"
+            
+            # Compute per-token cross-entropy loss without reduction.
+            # logits.view(-1, logits.size(-1)) now has shape (batch_size*block_size, vocab_size)
+            # Y.view(-1) has shape (batch_size*block_size,)
+            loss_all = F.cross_entropy(
+                logits.view(-1, logits.size(-1)),
+                Y.view(-1),
+                reduction='none'
+            ).view(Y.size())  # Reshape to (batch_size, block_size)
+            
+            # Apply the mask and average only over active tokens.
+            loss = (loss_all * mask).sum() / mask.sum()
+            loss = loss / gradient_accumulation_steps  # Adjust for gradient accumulation.
+            
+        # Optionally prefetch the next batch before backward.
         X, Y = get_batch('train')
-        # backward pass, with gradient scaling if training in fp16
         scaler.scale(loss).backward()
     # clip the gradient
     if grad_clip != 0.0:
