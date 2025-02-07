@@ -82,6 +82,7 @@ beta2 = 0.99 # make a bit bigger because number of tokens per iter is small
 
 
 """
+Wrong large
 number of parameters: 0.67M
 <5+7=11>
 best loss: 
