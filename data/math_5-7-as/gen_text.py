@@ -5,8 +5,8 @@ def generate_equations(skip=None):
     equations = []
     skip = skip or []  # Default to an empty list if no skip values are passed
     
-    for i in range(1, 10):
-        for j in range(1, 10):
+    for i in range(1, 10):  # Only positive numbers
+        for j in range(1, 10):  # Only positive numbers
             if (i, j) not in skip and (j, i) not in skip:  # Skip the pair (i, j) and (j, i)
                 # Addition equation
                 addition_equation = f"<{i}+{j}={i + j}>"
@@ -14,11 +14,8 @@ def generate_equations(skip=None):
                     addition_equation += " "
                 equations.append(addition_equation)
                 
-                # Subtraction equation (ensuring non-negative result)
-                if i >= j:
-                    subtraction_equation = f"<{i}-{j}={i - j}>"
-                else:
-                    subtraction_equation = f"<{j}-{i}={j - i}>"
+                # Subtraction equation (allowing negative results)
+                subtraction_equation = f"<{i}-{j}={i - j}>"
                 if len(subtraction_equation) == 7:
                     subtraction_equation += " "
                 equations.append(subtraction_equation)
@@ -37,9 +34,9 @@ def write_equations_to_file(filename, randomize=False, skip=None):
             f.write(equation + '\n')
 
 # Specify the filename
-filename = 'addition_and_subtraction.txt'
+filename = 'addition_and_subtraction_no_double_negatives.txt'
 
-# Specify the numbers to skip (for example, skip 5 and 7)
+# Specify the numbers to skip (for example, skip (5, 7) and (7, 5))
 skip_numbers = [(5, 7), (7, 5)]  # This will skip both <5+7=12> and <7+5=12>
 
 # Call the function with randomization enabled and skipping the specified numbers
