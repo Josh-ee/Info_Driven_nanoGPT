@@ -6,33 +6,50 @@ python data/math_5-7-as/prepare.py
 
 python train.py config/train_math_5-7_as2.py
 
-python sample.py --out_dir=out-math-5-7-as_0 --start=FILE:prompt_75.txt
-python sample.py --out_dir=out-math-5-7-as_0 --start=FILE:prompt_57.txt
+python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_75.txt
+python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_57.txt
 
-python sample.py --out_dir=out-math-5-7-as_0 --start=FILE:prompt_75-.txt
-python sample.py --out_dir=out-math-5-7-as_0 --start=FILE:prompt_57-.txt
+python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_75-.txt
+python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_57-.txt
 
-python sample.py --out_dir=out-math-5-7-as_0 --start=FILE:prompt.txt
+python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt.txt
 
-
-all the unique characters: 
- +-0123456789<=>
-vocab size: 17
----------------
-train_data_start <7-2=5> 
-train_data_end <6-3=3> 
----------------
-val_data_start <9-2=7> 
-val_data_end <7-7=0> 
----------------
-train has 1,142 tokens
 """
 
 dataset = 'math_5-7-as'
+"""
+BEST MODEL: out-math-5-7-as_2
+25:75 split
+
+n_layer = 1
+n_head = 1
+n_embd = 4
+dropout = 0.0
+mlp_expansion = 1
+
+eval_interval = 1000 #1000 # keep frequent because we'll overfit
+eval_iters = 200
+log_interval = 100 #100 # don't print too too often
+
+gradient_accumulation_steps = 1
+batch_size = 1024
+block_size = 9 # context of up to 256 previous characters
 
 
+learning_rate = 0.03 # with baby networks can afford to go a bit higher
+max_iters = 10000
+lr_decay_iters = 8000 # make equal to max_iters usually
+min_lr = 0.002# learning_rate / 10 usually
+beta2 = 0.99 # make a bit bigger because number of tokens per iter is small
 
-out_dir = 'out-math-5-7-as_0'
+-------------------------------------------------
+out_dir = 'out-math-5-7-as_2' is correct
+step 9000: train loss 0.6892, val loss 0.7426
+saving checkpoint to out-math-5-7-as_2
+"""
+
+
+out_dir = 'out-math-5-7-as_2-1'
 eval_interval = 1000 #1000 # keep frequent because we'll overfit
 eval_iters = 200
 log_interval = 100 #100 # don't print too too often
@@ -50,10 +67,10 @@ batch_size = 1024
 block_size = 9 # context of up to 256 previous characters
 
 
-learning_rate = 0.04 # with baby networks can afford to go a bit higher
-max_iters = 20000
-lr_decay_iters = 2500 # make equal to max_iters usually
-min_lr = 0.004# learning_rate / 10 usually
+learning_rate = 0.03 # with baby networks can afford to go a bit higher
+max_iters = 10000
+lr_decay_iters = 8000 # make equal to max_iters usually
+min_lr = 0.002# learning_rate / 10 usually
 beta2 = 0.99 # make a bit bigger because number of tokens per iter is small
 
 

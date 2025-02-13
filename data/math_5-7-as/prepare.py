@@ -31,7 +31,7 @@ def decode(l):
 
 # create the train and test splits
 n = len(data)
-split_idx = int(n * 0.8)
+split_idx = int(n * 0.75)
 
 # Find the nearest newline after the 90% point
 while split_idx < n and data[split_idx] != '\n':
