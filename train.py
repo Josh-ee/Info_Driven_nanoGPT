@@ -79,6 +79,9 @@ exec(open('configurator.py').read()) # overrides from command line or config fil
 config = {k: globals()[k] for k in config_keys} # will be useful for logging
 # -----------------------------------------------------------------------------
 
+out_dir_bal = out_dir + "_bal"
+os.makedirs(out_dir_bal, exist_ok=True)
+
 # various inits, derived attributes, I/O setup
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
 if ddp:
@@ -115,75 +118,115 @@ ctx = torch.amp.autocast('cuda')
 
 # poor man's data loader
 data_dir = os.path.join('data', dataset)
+
+
 # def get_batch(split):
-#     # We recreate np.memmap every batch to avoid a memory leak, as per
-#     # https://stackoverflow.com/questions/45132940/numpy-memmap-memory-usage-want-to-iterate-once/61472122#61472122
+#     # load the memmap 
 #     if split == 'train':
 #         data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
 #     else:
 #         data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
-#     ix = torch.randint(len(data) - block_size, (batch_size,))
-#     x = torch.stack([torch.from_numpy((data[i:i+block_size]).astype(np.int64)) for i in ix])
-#     y = torch.stack([torch.from_numpy((data[i+1:i+1+block_size]).astype(np.int64)) for i in ix])
+    
+#     # Get the token id for newline from our meta dict.
+#     # (Assumes meta['stoi'] contains the mapping and that '\n' is in the vocabulary.)
+#     newline_token = meta['stoi']['\n']
+
+#     # Compute the starting indices for each full line.
+#     # The very first token is the start of a line.
+#     line_starts = [0]
+#     # Find indices where the token is newline; the following token (if any) is a new line’s start.
+#     newline_idxs = np.where(data == newline_token)[0]
+#     for idx in newline_idxs:
+#         start = idx + 1
+#         if start < len(data):
+#             line_starts.append(start)
+#     # Filter out any starting positions that do not have enough tokens for a full math line.
+#     # (Assuming each math equation is exactly block_size tokens long.)
+#     line_starts = [i for i in line_starts if i + block_size <= len(data)]
+    
+    
+#     # Randomly choose batch_size many starting positions from our list of line starts.
+#     # (Using np.random.choice; you could also use torch if desired.)
+#     chosen_starts = np.random.choice(line_starts, size=batch_size, replace=True)
+    
+#     # Build the batch.
+#     # x will be the math line tokens and y will be the same sequence shifted by one.
+#     xs = []
+#     ys = []
+#     for i in chosen_starts:
+#         # x: tokens i ... i+block_size-1 (the complete math line)
+#         # y: tokens i+1 ... i+block_size (for next-token prediction)
+#         xs.append(torch.from_numpy(data[i:i+block_size].astype(np.int64)))
+#         ys.append(torch.from_numpy(data[i+1:i+block_size+1].astype(np.int64)))
+#     x = torch.stack(xs)
+#     y = torch.stack(ys)
+
 #     if device_type == 'cuda':
-#         # pin arrays x,y, which allows us to move them to GPU asynchronously (non_blocking=True)
+#         # pin the memory and move asynchronously
 #         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
 #     else:
 #         x, y = x.to(device), y.to(device)
 #     return x, y
 
+# import os
+# import numpy as np
+# import torch
+
 def get_batch(split):
-    # load the memmap (unchanged)
+    # Decide which memmap to read: train or val
     if split == 'train':
         data = np.memmap(os.path.join(data_dir, 'train.bin'), dtype=np.uint16, mode='r')
     else:
         data = np.memmap(os.path.join(data_dir, 'val.bin'), dtype=np.uint16, mode='r')
     
-    # Get the token id for newline from our meta dict.
-    # (Assumes meta['stoi'] contains the mapping and that '\n' is in the vocabulary.)
+    # The newline token ID (from your meta['stoi'] dictionary)
     newline_token = meta['stoi']['\n']
-
-    # Compute the starting indices for each full line.
-    # The very first token is the start of a line.
+    
+    # Find all line boundaries by looking for newline tokens
     line_starts = [0]
-    # Find indices where the token is newline; the following token (if any) is a new line’s start.
     newline_idxs = np.where(data == newline_token)[0]
     for idx in newline_idxs:
         start = idx + 1
         if start < len(data):
             line_starts.append(start)
-    # Filter out any starting positions that do not have enough tokens for a full math line.
-    # (Assuming each math equation is exactly block_size tokens long.)
+    
+    # Filter out any line that doesn’t have enough tokens for a full block_size
+    # (In your case, each line should be exactly block_size tokens long, so
+    # this step just guards against any incomplete line at the end of file.)
     line_starts = [i for i in line_starts if i + block_size <= len(data)]
     
-    
-    # Randomly choose batch_size many starting positions from our list of line starts.
-    # (Using np.random.choice; you could also use torch if desired.)
+    # Randomly pick 'batch_size' many line starts
     chosen_starts = np.random.choice(line_starts, size=batch_size, replace=True)
     
-    # Build the batch.
-    # x will be the math line tokens and y will be the same sequence shifted by one.
+    # Build the batch: x is the line, y is the same line shifted by one token
     xs = []
     ys = []
     for i in chosen_starts:
-        # x: tokens i ... i+block_size-1 (the complete math line)
-        # y: tokens i+1 ... i+block_size (for next-token prediction)
-        xs.append(torch.from_numpy(data[i:i+block_size].astype(np.int64)))
-        ys.append(torch.from_numpy(data[i+1:i+block_size+1].astype(np.int64)))
+        # x = data[i : i+block_size]
+        # y = data[i+1 : i+block_size+1]
+        xi = torch.from_numpy(data[i : i+block_size].astype(np.int64))
+        yi = torch.from_numpy(data[i+1 : i+block_size+1].astype(np.int64))
+        xs.append(xi)
+        ys.append(yi)
+    
     x = torch.stack(xs)
     y = torch.stack(ys)
-
+    
+    # Move tensors to GPU (or other device), if applicable
     if device_type == 'cuda':
-        # pin the memory and move asynchronously
         x, y = x.pin_memory().to(device, non_blocking=True), y.pin_memory().to(device, non_blocking=True)
     else:
         x, y = x.to(device), y.to(device)
+    
     return x, y
 
 
 # init these up here, can override if init_from='resume' (i.e. from a checkpoint)
 iter_num = 0
 best_val_loss = 1e9
+best_val_loss_bal = 1e9
+
+
 
 # attempt to derive vocab_size from the dataset
 meta_path = os.path.join(data_dir, 'meta.pkl')
@@ -314,7 +357,8 @@ while True:
     # evaluate the loss on train/val sets and write checkpoints
     if iter_num % eval_interval == 0 and master_process:
         losses = estimate_loss()
-        print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        train_val_diff =  abs(losses['train'] - losses['val'])
+        print(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}, diff {train_val_diff:.4f}")
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -334,8 +378,25 @@ while True:
                     'best_val_loss': best_val_loss,
                     'config': config,
                 }
-                print(f"saving checkpoint to {out_dir}")
+                print(f"                saving checkpoint to {out_dir}")
                 torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
+
+        if  train_val_diff <= 0.01:
+            if losses['val'] < best_val_loss_bal:
+                best_val_loss_bal = losses['val']
+                if iter_num > 0:
+                    checkpoint_bal = {
+                        'model': raw_model.state_dict(),
+                        'optimizer': optimizer.state_dict(),
+                        'model_args': model_args,
+                        'iter_num': iter_num,
+                        'best_val_loss_bal': best_val_loss_bal,
+                        'config': config,
+                    }
+                    
+                    print(f"New best balanced val loss |train-val| = {train_val_diff} ≤ 0.01. Saving checkpoint to {out_dir_bal}")
+                    torch.save(checkpoint_bal, os.path.join(out_dir_bal, 'ckpt.pt'))
+                    
     if iter_num == 0 and eval_only:
         break
 

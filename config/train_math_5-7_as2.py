@@ -6,13 +6,13 @@ python data/math_5-7-as/prepare.py
 
 python train.py config/train_math_5-7_as2.py
 
-python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_75.txt
-python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_57.txt
+python sample.py --out_dir=out-math-5-7-as_2 --start=FILE:prompt_75.txt
+python sample.py --out_dir=out-math-5-7-as_2 --start=FILE:prompt_57.txt
 
-python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_75-.txt
-python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt_57-.txt
+python sample.py --out_dir=out-math-5-7-as_2 --start=FILE:prompt_75-.txt
+python sample.py --out_dir=out-math-5-7-as_2 --start=FILE:prompt_57-.txt
 
-python sample.py --out_dir=out-math-5-7-as_2-1 --start=FILE:prompt.txt
+python sample.py --out_dir=out-math-5-7-as_2 --start=FILE:prompt.txt
 
 """
 
