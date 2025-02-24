@@ -28,14 +28,20 @@ python sample.py --out_dir=out-math-5-7-as_alt_bal --start=FILE:prompt.txt
 
 
 -----------------------------
-learning_rate = 0.03 # with baby networks can afford to go a bit higher
-max_iters = 2000
-lr_decay_iters = 1000 # make equal to max_iters usually
-min_lr = 0.003# learning_rate / 10 usually
+BEST YET *******
+learning_rate = 0.009 
+max_iters = 1000000
+lr_decay_iters = 500000 # make equal to max_iters usually
+min_lr = 0.0001# learning_rate / 10 usually
 beta2 = 0.98 # make a bit bigger because number of tokens per iter is small
 
-step 1000: train loss 0.7259, val loss 0.7866
-saving checkpoint to out-math-5-7-as_alt
+
+n_layer = 1
+n_head = 1
+n_embd = 4
+dropout = 0.0
+mlp_expansion = 1
+
 """
 
 dataset = 'math_5-7-as_alt'
